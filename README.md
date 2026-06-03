@@ -11,7 +11,7 @@ Number-preservation 原仓库地址：https://github.com/GeniusZeroTwo/Number-pr
 
 <img width="2124" height="1350" alt="image" src="https://github.com/user-attachments/assets/0a504956-2f46-400f-a548-e52d54f636c2" />
 
-
+# **教程来自 GeniusZeroTw 佬**
 ## **🛠️ 极简部署指南 / Deployment Guide**
 
 部署过程全程在网页端完成，小白也能在 5 分钟内搞定。
