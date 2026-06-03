@@ -916,13 +916,25 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;");
 }
 
-async function sendTelegramMessage(tgToken, chatId, text) {
+async function sendTelegramMessage(tgToken, chatId, text, replyMarkup) {
   if (!tgToken || !chatId) return;
   const tgUrl = `https://api.telegram.org/bot${tgToken}/sendMessage`;
+  const body = { chat_id: chatId, text, parse_mode: "HTML" };
+  if (replyMarkup) body.reply_markup = replyMarkup;
   await fetch(tgUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML" })
+    body: JSON.stringify(body)
+  });
+}
+
+async function answerTelegramCallback(tgToken, callbackId) {
+  if (!tgToken || !callbackId) return;
+  const tgUrl = `https://api.telegram.org/bot${tgToken}/answerCallbackQuery`;
+  await fetch(tgUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ callback_query_id: callbackId })
   });
 }
 
@@ -986,6 +998,31 @@ function getTelegramHelpText() {
 /skip - 跳过当前选填字段
 /site - 显示网站访问链接
 /cancel - 取消当前未完成流程`;
+}
+
+function getHelpKeyboard() {
+  return {
+    inline_keyboard: [
+      [
+        { text: "添加号码", callback_data: "cmd:add" },
+        { text: "查看列表", callback_data: "cmd:list" }
+      ],
+      [
+        { text: "打开网站", callback_data: "cmd:site" },
+        { text: "取消流程", callback_data: "cmd:cancel" }
+      ]
+    ]
+  };
+}
+
+function getTelegramCommandFromCallback(data) {
+  const callbackCommands = {
+    "cmd:add": "/add",
+    "cmd:list": "/list",
+    "cmd:site": "/site",
+    "cmd:cancel": "/cancel"
+  };
+  return callbackCommands[data] || "";
 }
 
 function getSiteText() {
@@ -1132,9 +1169,11 @@ async function handleTelegramWebhook(request, env, tgToken, tgChat, corsHeaders)
     return jsonResponse({ ok: true }, corsHeaders);
   }
 
-  const message = update.message || update.edited_message;
+  const callbackQuery = update.callback_query;
+  const message = update.message || update.edited_message || (callbackQuery && callbackQuery.message);
   const chatId = message && message.chat && message.chat.id ? String(message.chat.id) : "";
-  const text = message && typeof message.text === "string" ? message.text.trim() : "";
+  const callbackText = callbackQuery && typeof callbackQuery.data === "string" ? getTelegramCommandFromCallback(callbackQuery.data) : "";
+  const text = callbackText || (message && typeof message.text === "string" ? message.text.trim() : "");
 
   if (!chatId || !text || String(tgChat) !== chatId) {
     return jsonResponse({ ok: true }, corsHeaders);
@@ -1142,6 +1181,10 @@ async function handleTelegramWebhook(request, env, tgToken, tgChat, corsHeaders)
 
   if (!tgToken || !tgChat) {
     return jsonResponse({ ok: true }, corsHeaders);
+  }
+
+  if (callbackQuery) {
+    await answerTelegramCallback(tgToken, callbackQuery.id);
   }
 
   const command = text.split(/\s+/)[0].split("@")[0].toLowerCase();
@@ -1154,7 +1197,7 @@ async function handleTelegramWebhook(request, env, tgToken, tgChat, corsHeaders)
   }
 
   if (command === "/help") {
-    await sendTelegramMessage(tgToken, chatId, getTelegramHelpText());
+    await sendTelegramMessage(tgToken, chatId, getTelegramHelpText(), getHelpKeyboard());
     return jsonResponse({ ok: true }, corsHeaders);
   }
 

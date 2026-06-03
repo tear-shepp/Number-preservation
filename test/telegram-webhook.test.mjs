@@ -37,17 +37,39 @@ function createEnv(initial = {}) {
 
 function captureTelegramMessages() {
   const messages = [];
+  const payloads = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url, init) => {
-    messages.push(JSON.parse(init.body).text);
+    const payload = JSON.parse(init.body);
+    payloads.push(payload);
+    if (typeof payload.text === "string") messages.push(payload.text);
     return new Response(JSON.stringify({ ok: true }), { status: 200 });
   };
   return {
     messages,
+    payloads,
     restore() {
       globalThis.fetch = originalFetch;
     },
   };
+}
+
+function telegramCallbackUpdate(data, chatId = 12345) {
+  return new Request("https://example.test/api/telegram/webhook", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      update_id: Date.now(),
+      callback_query: {
+        id: "callback-1",
+        data,
+        message: {
+          message_id: 1,
+          chat: { id: chatId },
+        },
+      },
+    }),
+  });
 }
 
 function telegramUpdate(text, chatId = 12345) {
@@ -173,6 +195,51 @@ test("/start 返回欢迎说明和添加流程，/help 只返回可用命令", a
     assert.match(capture.messages[1], /<b>可用命令<\/b>/);
     assert.match(capture.messages[1], /\/site - 显示网站访问链接/);
     assert.doesNotMatch(capture.messages[1], /添加号码流程/);
+    assert.deepEqual(capture.payloads[1].reply_markup.inline_keyboard, [
+      [
+        { text: "添加号码", callback_data: "cmd:add" },
+        { text: "查看列表", callback_data: "cmd:list" },
+      ],
+      [
+        { text: "打开网站", callback_data: "cmd:site" },
+        { text: "取消流程", callback_data: "cmd:cancel" },
+      ],
+    ]);
+  } finally {
+    capture.restore();
+  }
+});
+
+test("/help 按钮回调复用现有命令", async () => {
+  const worker = await loadWorker();
+  const env = createEnv({
+    esim_list: JSON.stringify([
+      {
+        id: "1",
+        name: "KnowRoaming",
+        number: "+1 234 567 8900",
+        cycle: 180,
+        expireDate: "2026-12-31",
+        platforms: "Telegram",
+        remark: "半年发一次短信",
+      },
+    ]),
+  });
+  const capture = captureTelegramMessages();
+
+  try {
+    await worker.fetch(telegramCallbackUpdate("cmd:list"), env, {});
+    await worker.fetch(telegramCallbackUpdate("cmd:site"), env, {});
+    await worker.fetch(telegramCallbackUpdate("cmd:add"), env, {});
+
+    assert.match(capture.messages[0], /当前号码列表/);
+    assert.match(capture.messages[0], /KnowRoaming/);
+    assert.match(capture.messages[1], /https:\/\/phone\.betony\.cc\.cd/);
+    assert.match(capture.messages[2], /第 1\/6 步：卡片名称/);
+
+    const session = JSON.parse(env.ESIM_DB.store.get("tg_session_12345"));
+    assert.equal(session.action, "add");
+    assert.equal(session.step, "name");
   } finally {
     capture.restore();
   }
