@@ -153,7 +153,7 @@ test("/skip 跳过手机号、平台和备注", async () => {
   }
 });
 
-test("/start 返回欢迎说明，/help 只返回可用命令", async () => {
+test("/start 返回欢迎说明和添加流程，/help 只返回可用命令", async () => {
   const worker = await loadWorker();
   const env = createEnv();
   const capture = captureTelegramMessages();
@@ -164,7 +164,9 @@ test("/start 返回欢迎说明，/help 只返回可用命令", async () => {
 
     assert.match(capture.messages[0], /欢迎使用/);
     assert.match(capture.messages[0], /发送 \/help 查看可用命令/);
-    assert.doesNotMatch(capture.messages[0], /可用命令[\s\S]*\/list/);
+    assert.match(capture.messages[0], /添加号码流程/);
+    assert.match(capture.messages[0], /发送 \/add 后，我会按 6 步询问/);
+    assert.match(capture.messages[0], /可发送 \/skip 跳过/);
     assert.match(capture.messages[1], /<b>可用命令<\/b>/);
     assert.match(capture.messages[1], /\/site - 显示网站访问链接/);
     assert.doesNotMatch(capture.messages[1], /添加号码流程/);
