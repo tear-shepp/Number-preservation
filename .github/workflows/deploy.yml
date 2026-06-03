@@ -1,0 +1,7 @@
+- name: Replace KV ID Placeholder
+  run: sed -i 's/${KV_ID}/${{ secrets.CLOUDFLARE_KV_ID }}/g' wrangler.toml
+
+- name: Deploy to Cloudflare Workers
+  uses: cloudflare/wrangler-action@v3
+  with:
+    apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
