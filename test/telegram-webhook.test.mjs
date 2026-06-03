@@ -212,6 +212,9 @@ test("/start 返回欢迎说明和添加流程，/help 只返回可用命令", a
         { text: "打开网站", callback_data: "cmd:site" },
         { text: "帮助", callback_data: "cmd:help" },
       ],
+      [
+        { text: "一键续期", callback_data: "cmd:renew" },
+      ],
     ]);
   } finally {
     capture.restore();
@@ -240,17 +243,105 @@ test("/help 按钮回调复用现有命令", async () => {
     await worker.fetch(telegramCallbackUpdate("cmd:site"), env, {});
     await worker.fetch(telegramCallbackUpdate("cmd:add"), env, {});
     await worker.fetch(telegramCallbackUpdate("cmd:help"), env, {});
+    await worker.fetch(telegramCallbackUpdate("cmd:renew"), env, {});
 
     assert.match(capture.messages[0], /当前号码列表/);
     assert.match(capture.messages[0], /KnowRoaming/);
     assert.match(capture.messages[1], /https:\/\/phone\.betony\.cc\.cd/);
     assert.match(capture.messages[2], /第 1\/6 步：卡片名称/);
     assert.match(capture.messages[3], /<b>可用命令<\/b>/);
-    assert.deepEqual(capture.payloads.at(-1).reply_markup.inline_keyboard[1][1], { text: "帮助", callback_data: "cmd:help" });
+
+    assert.match(capture.messages[4], /回复序号/);
+    assert.match(capture.messages[4], /KnowRoaming/);
+
+    const keyboardPayloads = capture.payloads.filter(p => p.reply_markup);
+    assert.deepEqual(keyboardPayloads.at(-1).reply_markup.inline_keyboard[1][1], { text: "帮助", callback_data: "cmd:help" });
 
     const session = JSON.parse(env.ESIM_DB.store.get("tg_session_12345"));
     assert.equal(session.action, "add");
     assert.equal(session.step, "name");
+  } finally {
+    capture.restore();
+  }
+});
+
+test("/renew N 一键续期更新 expireDate", async () => {
+  const worker = await loadWorker();
+  const env = createEnv({
+    esim_list: JSON.stringify([
+      { id: "1", name: "KnowRoaming", number: "+1 234", cycle: 180, expireDate: "2026-12-31", platforms: "Telegram", remark: "test" },
+    ]),
+    [startKeyboardKey()]: todayString(),
+  });
+  const capture = captureTelegramMessages();
+
+  try {
+    await worker.fetch(telegramUpdate("/renew 1"), env, {});
+    const esims = JSON.parse(env.ESIM_DB.store.get("esim_list"));
+    assert.equal(esims.length, 1);
+    assert.equal(esims[0].name, "KnowRoaming");
+    assert.equal(esims[0].number, "+1 234");
+    assert.equal(esims[0].cycle, 180);
+    assert.equal(esims[0].platforms, "Telegram");
+    assert.equal(esims[0].remark, "test");
+
+    const newDate = new Date();
+    newDate.setDate(newDate.getDate() + 180);
+    const expectedStr = `${newDate.getFullYear()}-${String(newDate.getMonth() + 1).padStart(2, "0")}-${String(newDate.getDate()).padStart(2, "0")}`;
+    assert.equal(esims[0].expireDate, expectedStr);
+    assert.match(capture.messages.at(-1), /已续期/);
+  } finally {
+    capture.restore();
+  }
+});
+
+test("/renew 无参数显示号码列表和续期提示", async () => {
+  const worker = await loadWorker();
+  const env = createEnv({
+    esim_list: JSON.stringify([
+      { id: "1", name: "KnowRoaming", cycle: 180, expireDate: "2026-12-31" },
+      { id: "2", name: "Firsty", cycle: 90, expireDate: "2026-09-30" },
+    ]),
+    [startKeyboardKey()]: todayString(),
+  });
+  const capture = captureTelegramMessages();
+
+  try {
+    await worker.fetch(telegramUpdate("/renew"), env, {});
+    assert.match(capture.messages.at(-1), /回复序号直接续期/);
+    assert.match(capture.messages.at(-1), /1\. KnowRoaming/);
+    assert.match(capture.messages.at(-1), /2\. Firsty/);
+  } finally {
+    capture.restore();
+  }
+});
+
+test("/renew 空列表提示没有号码", async () => {
+  const worker = await loadWorker();
+  const env = createEnv({ esim_list: "[]", [startKeyboardKey()]: todayString() });
+  const capture = captureTelegramMessages();
+
+  try {
+    await worker.fetch(telegramUpdate("/renew"), env, {});
+    assert.match(capture.messages.at(-1), /还没有号码/);
+  } finally {
+    capture.restore();
+  }
+});
+
+test("/renew 序号越界提示错误", async () => {
+  const worker = await loadWorker();
+  const env = createEnv({
+    esim_list: JSON.stringify([
+      { id: "1", name: "KnowRoaming", cycle: 180, expireDate: "2026-12-31" },
+    ]),
+    [startKeyboardKey()]: todayString(),
+  });
+  const capture = captureTelegramMessages();
+
+  try {
+    await worker.fetch(telegramUpdate("/renew 999"), env, {});
+    assert.match(capture.messages.at(-1), /序号不正确/);
   } finally {
     capture.restore();
   }

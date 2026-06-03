@@ -1004,6 +1004,7 @@ function getTelegramHelpText() {
 /help - 查看可用命令
 /list - 查看当前号码列表
 /add - 按步骤添加一个新号码
+/renew - 一键续期，使用 /renew 序号 快速操作
 /skip - 跳过当前选填字段
 /site - 显示网站访问链接
 /cancel - 取消当前未完成流程`;
@@ -1019,6 +1020,9 @@ function getHelpKeyboard() {
       [
         { text: "打开网站", callback_data: "cmd:site" },
         { text: "帮助", callback_data: "cmd:help" }
+      ],
+      [
+        { text: "一键续期", callback_data: "cmd:renew" }
       ]
     ]
   };
@@ -1037,7 +1041,8 @@ function getTelegramCommandFromCallback(data) {
     "cmd:add": "/add",
     "cmd:list": "/list",
     "cmd:site": "/site",
-    "cmd:help": "/help"
+    "cmd:help": "/help",
+    "cmd:renew": "/renew"
   };
   return callbackCommands[data] || "";
 }
@@ -1251,6 +1256,40 @@ async function handleTelegramWebhook(request, env, tgToken, tgChat, corsHeaders)
     }
     const textList = esims.map((sim, index) => `${index + 1}. ${escapeHtml(sim.name)}\n📞 ${escapeHtml(sim.number || "未填写")}\n📅 ${escapeHtml(sim.expireDate || "未填写")}｜🔄 ${escapeHtml(sim.cycle || "未设置")} 天${sim.platforms ? `\n🌐 ${escapeHtml(sim.platforms)}` : ""}${sim.remark ? `\n📝 ${escapeHtml(sim.remark)}` : ""}`).join("\n\n");
     await sendTelegramMessage(tgToken, chatId, `📋 <b>当前号码列表</b>\n\n${textList}`);
+    return jsonResponse({ ok: true }, corsHeaders);
+  }
+
+  if (command === "/renew") {
+    const esims = await getEsims(env);
+    const parts = text.split(/\s+/);
+    const arg = parts[1];
+    if (!arg) {
+      if (esims.length === 0) {
+        await sendTelegramMessage(tgToken, chatId, "当前还没有号码记录。发送 /add 可以添加第一个号码。");
+        return jsonResponse({ ok: true }, corsHeaders);
+      }
+      const textList = esims.map((sim, index) => `${index + 1}. ${escapeHtml(sim.name)}\n📅 ${escapeHtml(sim.expireDate || "未填写")}｜🔄 ${escapeHtml(sim.cycle || "未设置")} 天`).join("\n\n");
+      await sendTelegramMessage(tgToken, chatId, `📋 <b>选择要续期的号码</b>\n\n${textList}\n\n回复序号直接续期，例如 /renew 1`);
+      return jsonResponse({ ok: true }, corsHeaders);
+    }
+    const index = parseInt(arg, 10) - 1;
+    if (Number.isNaN(index) || index < 0 || index >= esims.length) {
+      await sendTelegramMessage(tgToken, chatId, "序号不正确，请输入列表中的有效序号。例如 /renew 1");
+      return jsonResponse({ ok: true }, corsHeaders);
+    }
+    const sim = esims[index];
+    if (!sim.cycle || sim.cycle <= 0) {
+      await sendTelegramMessage(tgToken, chatId, `${escapeHtml(sim.name)} 未设置有效保号周期，无法自动续期。可在网页端手动编辑。`);
+      return jsonResponse({ ok: true }, corsHeaders);
+    }
+    const newDate = new Date();
+    newDate.setDate(newDate.getDate() + sim.cycle);
+    const year = newDate.getFullYear();
+    const month = String(newDate.getMonth() + 1).padStart(2, "0");
+    const day = String(newDate.getDate()).padStart(2, "0");
+    sim.expireDate = `${year}-${month}-${day}`;
+    await saveEsims(env, esims);
+    await sendTelegramMessage(tgToken, chatId, `✅ ${escapeHtml(sim.name)} 已续期至 ${sim.expireDate}`);
     return jsonResponse({ ok: true }, corsHeaders);
   }
 
