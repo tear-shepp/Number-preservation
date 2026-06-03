@@ -163,83 +163,89 @@ const HTML_CONTENT = `<!DOCTYPE html>
         let countdownInterval;
         let editingId = null; 
 
-        // ================= 国旗字典配置 =================
+        // ================= 跨平台 SVG 国旗字典配置 =================
+        // 改用 ISO 3166-1 alpha-2 代码，通过 FlagCDN 加载真正的图片
         const countryFlags = [
-            { prefix: "+1", flag: "🇺🇸/🇨🇦" },   
-            { prefix: "+44", flag: "🇬🇧" },  
-            { prefix: "+86", flag: "🇨🇳" },  
-            { prefix: "+852", flag: "🇭🇰" }, 
-            { prefix: "+853", flag: "🇲🇴" }, 
-            { prefix: "+886", flag: "🇹🇼" }, 
-            { prefix: "+81", flag: "🇯🇵" },  
-            { prefix: "+82", flag: "🇰🇷" },  
-            { prefix: "+65", flag: "🇸🇬" },  
-            { prefix: "+60", flag: "🇲🇾" },  
-            { prefix: "+61", flag: "🇦🇺" },  
-            { prefix: "+64", flag: "🇳🇿" },  
-            { prefix: "+66", flag: "🇹🇭" },  
-            { prefix: "+62", flag: "🇮🇩" },  
-            { prefix: "+63", flag: "🇵🇭" },  
-            { prefix: "+84", flag: "🇻🇳" },  
-            { prefix: "+91", flag: "🇮🇳" },  
-            { prefix: "+971", flag: "🇦🇪" }, 
-            { prefix: "+33", flag: "🇫🇷" },  
-            { prefix: "+49", flag: "🇩🇪" },  
-            { prefix: "+39", flag: "🇮🇹" },  
-            { prefix: "+34", flag: "🇪🇸" },  
-            { prefix: "+7", flag: "🇷🇺/🇰🇿" },
-            { prefix: "+380", flag: "🇺🇦" }, 
-            { prefix: "+90", flag: "🇹🇷" },  
-            { prefix: "+55", flag: "🇧🇷" },  
-            { prefix: "+52", flag: "🇲🇽" },  
-            { prefix: "+27", flag: "🇿🇦" },  
-            { prefix: "+234", flag: "🇳🇬" }, 
-            { prefix: "+31", flag: "🇳🇱" },  
-            { prefix: "+32", flag: "🇧🇪" },  
-            { prefix: "+41", flag: "🇨🇭" },  
-            { prefix: "+43", flag: "🇦🇹" },  
-            { prefix: "+46", flag: "🇸🇪" },  
-            { prefix: "+47", flag: "🇳🇴" },  
-            { prefix: "+48", flag: "🇵🇱" },  
-            { prefix: "+45", flag: "🇩🇰" },  
-            { prefix: "+358", flag: "🇫🇮" }, 
-            { prefix: "+351", flag: "🇵🇹" }, 
-            { prefix: "+30", flag: "🇬🇷" },  
-            { prefix: "+353", flag: "🇮🇪" }, 
-            { prefix: "+966", flag: "🇸🇦" }, 
-            { prefix: "+972", flag: "🇮🇱" }, 
-            { prefix: "+92", flag: "🇵🇰" },  
-            { prefix: "+880", flag: "🇧🇩" }, 
-            { prefix: "+94", flag: "🇱🇰" },  
-            { prefix: "+20", flag: "🇪🇬" },  
-            { prefix: "+254", flag: "🇰🇪" }, 
-            { prefix: "+54", flag: "🇦🇷" },  
-            { prefix: "+56", flag: "🇨🇱" },  
-            { prefix: "+57", flag: "🇨🇴" },  
-            { prefix: "+51", flag: "🇵🇪" },  
-            { prefix: "+58", flag: "🇻🇪" },  
-            { prefix: "+370", flag: "🇱🇹" }, 
-            { prefix: "+371", flag: "🇱🇻" }, 
-            { prefix: "+372", flag: "🇪🇪" }, 
-            { prefix: "+995", flag: "🇬🇪" }, 
-            { prefix: "+374", flag: "🇦🇲" }, 
-            { prefix: "+381", flag: "🇷🇸" }, 
-            { prefix: "+359", flag: "🇧🇬" }, 
-            { prefix: "+357", flag: "🇨🇾" }  
+            { prefix: "+1", iso: ["us", "ca"] },   
+            { prefix: "+44", iso: ["gb"] },  
+            { prefix: "+86", iso: ["cn"] },  
+            { prefix: "+852", iso: ["hk"] }, 
+            { prefix: "+853", iso: ["mo"] }, 
+            { prefix: "+886", iso: ["tw"] }, 
+            { prefix: "+81", iso: ["jp"] },  
+            { prefix: "+82", iso: ["kr"] },  
+            { prefix: "+65", iso: ["sg"] },  
+            { prefix: "+60", iso: ["my"] },  
+            { prefix: "+61", iso: ["au"] },  
+            { prefix: "+64", iso: ["nz"] },  
+            { prefix: "+66", iso: ["th"] },  
+            { prefix: "+62", iso: ["id"] },  
+            { prefix: "+63", iso: ["ph"] },  
+            { prefix: "+84", iso: ["vn"] },  
+            { prefix: "+91", iso: ["in"] },  
+            { prefix: "+971", iso: ["ae"] }, 
+            { prefix: "+33", iso: ["fr"] },  
+            { prefix: "+49", iso: ["de"] },  
+            { prefix: "+39", iso: ["it"] },  
+            { prefix: "+34", iso: ["es"] },  
+            { prefix: "+7", iso: ["ru", "kz"] },
+            { prefix: "+380", iso: ["ua"] }, 
+            { prefix: "+90", iso: ["tr"] },  
+            { prefix: "+55", iso: ["br"] },  
+            { prefix: "+52", iso: ["mx"] },  
+            { prefix: "+27", iso: ["za"] },  
+            { prefix: "+234", iso: ["ng"] }, 
+            { prefix: "+31", iso: ["nl"] },  
+            { prefix: "+32", iso: ["be"] },  
+            { prefix: "+41", iso: ["ch"] },  
+            { prefix: "+43", iso: ["at"] },  
+            { prefix: "+46", iso: ["se"] },  
+            { prefix: "+47", iso: ["no"] },  
+            { prefix: "+48", iso: ["pl"] },  
+            { prefix: "+45", iso: ["dk"] },  
+            { prefix: "+358", iso: ["fi"] }, 
+            { prefix: "+351", iso: ["pt"] }, 
+            { prefix: "+30", iso: ["gr"] },  
+            { prefix: "+353", iso: ["ie"] }, 
+            { prefix: "+966", iso: ["sa"] }, 
+            { prefix: "+972", iso: ["il"] }, 
+            { prefix: "+92", iso: ["pk"] },  
+            { prefix: "+880", iso: ["bd"] }, 
+            { prefix: "+94", iso: ["lk"] },  
+            { prefix: "+20", iso: ["eg"] },  
+            { prefix: "+254", iso: ["ke"] }, 
+            { prefix: "+54", iso: ["ar"] },  
+            { prefix: "+56", iso: ["cl"] },  
+            { prefix: "+57", iso: ["co"] },  
+            { prefix: "+51", iso: ["pe"] },  
+            { prefix: "+58", iso: ["ve"] },  
+            { prefix: "+370", iso: ["lt"] }, 
+            { prefix: "+371", iso: ["lv"] }, 
+            { prefix: "+372", iso: ["ee"] }, 
+            { prefix: "+995", iso: ["ge"] }, 
+            { prefix: "+374", iso: ["am"] }, 
+            { prefix: "+381", iso: ["rs"] }, 
+            { prefix: "+359", iso: ["bg"] }, 
+            { prefix: "+357", iso: ["cy"] }  
         ];
 
         function getCountryFlag(numberStr) {
-            if (!numberStr) return "📞"; 
+            // 默认兜底图标（使用 FontAwesome，完美跨平台）
+            const defaultIcon = '<i class="fa-solid fa-globe text-blue-400 text-lg"></i>';
+            if (!numberStr) return defaultIcon; 
             const cleanNumber = numberStr.replace(/[\\s\\-\\(\\)\\.]/g, '');
-            if (!cleanNumber.startsWith("+")) return "🌍"; 
+            if (!cleanNumber.startsWith("+")) return defaultIcon; 
             
             const sortedFlags = countryFlags.sort((a, b) => b.prefix.length - a.prefix.length);
             for (let item of sortedFlags) {
                 if (cleanNumber.startsWith(item.prefix)) {
-                    return item.flag;
+                    // 使用 FlagCDN 生成 SVG 高清图片，多国籍用 "/" 分隔
+                    return item.iso.map(code => 
+                        \`<img src="https://flagcdn.com/\${code}.svg" class="inline-block w-[22px] h-auto rounded-[2px] shadow-[0_0_2px_rgba(0,0,0,0.2)]" alt="\${code}" title="国家/地区代码：\${item.prefix}">\`
+                    ).join('<span class="mx-0.5 text-gray-300 text-xs">/</span>');
                 }
             }
-            return "🌍"; 
+            return defaultIcon; 
         }
 
         document.getElementById('current-date').innerText = new Date().toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
@@ -415,7 +421,7 @@ const HTML_CONTENT = `<!DOCTYPE html>
                 }
 
                 let percent = Math.min(Math.max((diffDays / 365) * 100, 0), 100);
-                const flagEmoji = getCountryFlag(sim.number);
+                const flagHTML = getCountryFlag(sim.number);
                 
                 // 渲染备注区域
                 const remarkHTML = sim.remark ? \`<div class="bg-blue-50/60 rounded-lg p-2.5 mb-3 text-xs text-gray-700 border border-blue-100/60 break-words leading-relaxed"><i class="fa-regular fa-comment-dots mr-1.5 text-blue-400"></i>\${sim.remark}</div>\` : '';
@@ -453,8 +459,8 @@ const HTML_CONTENT = `<!DOCTYPE html>
                         </div>
                         
                         <div class="flex justify-between items-center mb-4 gap-2">
-                            <p class="text-gray-600 font-mono text-sm flex items-center gap-1.5 truncate">
-                                <span class="text-lg">\${flagEmoji}</span>
+                            <p class="text-gray-600 font-mono text-sm flex items-center gap-2 truncate">
+                                <span class="flex items-center shrink-0">\${flagHTML}</span>
                                 <span class="truncate">\${sim.number || '未登记号码'}</span>
                             </p>
                             <span class="px-2.5 py-1 rounded-full text-[11px] font-bold shadow-sm whitespace-nowrap flex-shrink-0 \${badgeClass}">
