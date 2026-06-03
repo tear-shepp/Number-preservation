@@ -90,15 +90,35 @@
    Secret: 你的 Cloudflare API Token
    ```
 
-`CLOUDFLARE_KV_ID` 用来替换 `wrangler.toml` 里的 `${KV_ID}`。`CLOUDFLARE_API_TOKEN` 用来授权 GitHub Actions 把 Worker 部署到你的 Cloudflare 账号。
+5. 再点击 **New repository secret**，添加第三个密钥：
 
-Cloudflare API Token 建议使用最小权限：能编辑 Workers，并能读取账号资源。生成后只保存到 GitHub Secrets，不要写进 README、代码或聊天记录。
+   ```text
+   Name: TG_BOT_TOKEN
+   Secret: 你的 Telegram Bot Token
+   ```
+
+6. 切换到 **Variables**，点击 **New repository variable**，添加 Worker 访问地址：
+
+   ```text
+   Name: WORKER_URL
+   Value: https://你的 Worker 域名
+   ```
+
+   示例：
+
+   ```text
+   https://esim-api.xxx.workers.dev
+   ```
+
+`CLOUDFLARE_KV_ID` 用来替换 `wrangler.toml` 里的 `${KV_ID}`。`CLOUDFLARE_API_TOKEN` 用来授权 GitHub Actions 把 Worker 部署到你的 Cloudflare 账号。`TG_BOT_TOKEN` 和 `WORKER_URL` 用来在部署完成后自动设置 Telegram Webhook。
+
+Cloudflare API Token 建议使用最小权限：能编辑 Workers，并能读取账号资源。Telegram Bot Token 和 Cloudflare API Token 都只保存到 GitHub Secrets，不要写进 README、代码或聊天记录。
 
 ### **步骤 4：理解 .github/workflows/deploy.yml 的作用**
 
 `.github/workflows/deploy.yml` 是 GitHub Actions 自动部署脚本。你向 `main` 分支推送代码，或者 Sync Fork 后产生新的提交时，它会自动执行。
 
-当前流程做了三件事：
+当前流程做了四件事：
 
 1. 拉取仓库代码：
 
@@ -123,7 +143,21 @@ Cloudflare API Token 建议使用最小权限：能编辑 Workers，并能读取
        apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
    ```
 
-所以日常更新时，你只需要把代码推送到自己的 GitHub 仓库，GitHub Actions 会自动完成 KV ID 替换和 Worker 部署。
+4. 部署完成后自动设置 Telegram Webhook：
+
+   ```yaml
+   - name: Set Telegram Webhook
+     env:
+       TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+       WORKER_URL: ${{ vars.WORKER_URL }}
+     run: |
+       WEBHOOK_URL="${WORKER_URL%/}/api/telegram/webhook"
+       curl --fail --show-error --silent --request POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/setWebhook" \
+         --data-urlencode "url=${WEBHOOK_URL}"
+       echo "Telegram webhook set to ${WEBHOOK_URL}"
+   ```
+
+所以日常更新时，你只需要把代码推送到自己的 GitHub 仓库，GitHub Actions 会自动完成 KV ID 替换、Worker 部署和 Telegram Webhook 设置。
 
 ### **步骤 5：在 Cloudflare 部署**
 
@@ -151,7 +185,9 @@ Cloudflare API Token 建议使用最小权限：能编辑 Workers，并能读取
 
 ### **步骤 7：设置 Telegram 机器人 Webhook**
 
-如果你只需要网页验证码和到期提醒，可以跳过这一步。如果你想在 Telegram 机器人里直接添加号码、查看列表，请继续设置 Webhook。
+如果你已经按步骤 3 配置了 `TG_BOT_TOKEN` 和 `WORKER_URL`，GitHub Actions 会在每次部署后自动设置 Webhook，通常不用手动打开链接。
+
+如果你想手动设置，或需要排查自动设置是否成功，可以继续使用下面的备用方法。
 
 1. 先确认 Worker 已经部署成功，并记下你的 Worker 访问地址，例如：
 
@@ -172,6 +208,12 @@ Cloudflare API Token 建议使用最小权限：能编辑 Workers，并能读取
    ```
 
 4. 安全限制：机器人只处理 `TG_CHAT_ID` 对应用户发来的消息。其他人就算知道机器人，也不能添加或查看你的号码数据。
+
+5. 如果要检查当前 Webhook 是否已经设置成功，可以打开：
+
+   ```text
+   https://api.telegram.org/bot<TG_BOT_TOKEN>/getWebhookInfo
+   ```
 
 ### **步骤 8：开始使用！**
 

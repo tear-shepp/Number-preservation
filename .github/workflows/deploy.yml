@@ -23,3 +23,14 @@ jobs:
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+      # 4. Webhook 步骤：部署后自动把 Telegram 机器人回调地址指向当前 Worker
+      - name: Set Telegram Webhook
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          WORKER_URL: ${{ vars.WORKER_URL }}
+        run: |
+          WEBHOOK_URL="${WORKER_URL%/}/api/telegram/webhook"
+          curl --fail --show-error --silent --request POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/setWebhook" \
+            --data-urlencode "url=${WEBHOOK_URL}"
+          echo "Telegram webhook set to ${WEBHOOK_URL}"
