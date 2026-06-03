@@ -304,10 +304,10 @@ Cloudflare API Token 建议使用最小权限：能编辑 Workers，并能读取
 
 ### **显示网站链接**
 
-发送 /site 后，机器人会返回网页看板地址：
+发送 /site 后，机器人会返回网页看板地址（你的 worker 访问地址）：
 
 ```text
-https://phone.betony.cc.cd
+ https://esim-api.xxx.workers.dev
 ```
 
 ## **🙋‍♂️ 常见问题 / FAQ**
