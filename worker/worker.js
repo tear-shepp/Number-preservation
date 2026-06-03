@@ -962,7 +962,10 @@ function getTelegramStartText() {
 
 4/6 到期日：必填，格式 YYYY-MM-DD，例如 2026-12-31
 
-5/6 已注册平台：选填，例如 Telegram Google OpenAI
+5/6 已注册平台：选填
+多个平台请用空格或英文逗号分隔
+例如 Telegram Google OpenAI
+或 Telegram, Google, OpenAI
 可发送 /skip 跳过
 
 6/6 备注/保号要求：选填，例如 半年发一次短信
@@ -999,7 +1002,7 @@ function getAddStepPrompt(step) {
     number: "📞 <b>第 2/6 步：手机号</b>\n\n请输入手机号，建议带国际区号。\n\n示例：\n+1 234 567 8900\n\n如果不想填写，请发送 /skip 跳过。\n\n如需取消，请发送 /cancel。",
     cycle: "🔄 <b>第 3/6 步：保号周期</b>\n\n请输入保号周期天数，必须是大于 0 的整数。\n\n示例：\n180\n\n如需取消，请发送 /cancel。",
     expireDate: "📅 <b>第 4/6 步：到期日</b>\n\n请输入本次到期日，格式必须是 YYYY-MM-DD。\n\n示例：\n2026-12-31\n\n如需取消，请发送 /cancel。",
-    platforms: "🌐 <b>第 5/6 步：已注册平台</b>\n\n请输入这个号码已绑定的平台，可用空格或逗号分隔。\n\n示例：\nTelegram Google OpenAI\n\n如果不想填写，请发送 /skip 跳过。\n\n如需取消，请发送 /cancel。",
+    platforms: "🌐 <b>第 5/6 步：已注册平台</b>\n\n请输入这个号码已绑定的平台。\n\n多个平台请用空格或英文逗号分隔。\n\n示例：\nTelegram Google OpenAI\n或：\nTelegram, Google, OpenAI\n\n如果不想填写，请发送 /skip 跳过。\n\n如需取消，请发送 /cancel。",
     remark: "📝 <b>第 6/6 步：备注/保号要求</b>\n\n请输入备注或保号要求。\n\n示例：\n半年发一次短信\n\n如果不想填写，请发送 /skip 跳过。\n\n如需取消，请发送 /cancel。"
   };
   return prompts[step];

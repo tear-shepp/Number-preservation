@@ -152,7 +152,11 @@
 
 5. 已注册平台：选填。
 
+   多个平台请用空格或英文逗号分隔。
+
    示例：Telegram Google OpenAI。
+
+   或：Telegram, Google, OpenAI。
 
    如果不想填写，发送 `/skip` 跳过。
 

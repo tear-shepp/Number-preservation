@@ -147,6 +147,8 @@ test("/skip 跳过手机号、平台和备注", async () => {
     assert.equal(esims[0].number, "");
     assert.equal(esims[0].platforms, "");
     assert.equal(esims[0].remark, "");
+    assert.match(capture.messages.join("\n"), /多个平台请用空格或英文逗号分隔/);
+    assert.match(capture.messages.join("\n"), /Telegram, Google, OpenAI/);
     assert.match(capture.messages.join("\n"), /发送 \/skip 跳过/);
   } finally {
     capture.restore();
@@ -166,6 +168,7 @@ test("/start 返回欢迎说明和添加流程，/help 只返回可用命令", a
     assert.match(capture.messages[0], /发送 \/help 查看可用命令/);
     assert.match(capture.messages[0], /添加号码流程/);
     assert.match(capture.messages[0], /发送 \/add 后，我会按 6 步询问/);
+    assert.match(capture.messages[0], /多个平台请用空格或英文逗号分隔/);
     assert.match(capture.messages[0], /可发送 \/skip 跳过/);
     assert.match(capture.messages[1], /<b>可用命令<\/b>/);
     assert.match(capture.messages[1], /\/site - 显示网站访问链接/);
