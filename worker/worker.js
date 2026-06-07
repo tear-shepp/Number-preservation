@@ -969,7 +969,7 @@ function isValidDateString(value) {
 function getTelegramStartText() {
   return `🤖 <b>欢迎使用 eSIM 保号机器人</b>
 
-我可以帮你查看号码列表、逐步添加新号码，也可以显示网页看板地址。
+我可以帮你查看号码列表、逐步添加新号码、一键续期，也可以按钮化管理已注册平台。
 
 <b>添加号码流程</b>
 发送 /add 后，我会按 6 步询问：
@@ -994,6 +994,9 @@ function getTelegramStartText() {
 
 最后我会发送汇总。回复 确认 保存，回复 取消 或 /cancel 放弃。
 
+<b>管理已注册平台</b>
+发送 /platform，或点击 [修改平台]，可以按按钮新增、删除、重命名或清空某个号码的已注册平台。
+
 发送 /help 查看可用命令。`;
 }
 
@@ -1007,6 +1010,7 @@ function getTelegramHelpText() {
 /renew - 一键续期，使用 /renew 序号 快速操作
 /skip - 跳过当前选填字段
 /site - 显示网站访问链接
+/platform - 按钮化管理已注册平台
 /cancel - 取消当前未完成流程`;
 }
 
@@ -1022,7 +1026,8 @@ function getMainKeyboard() {
         { text: "帮助", callback_data: "cmd:help" }
       ],
       [
-        { text: "一键续期", callback_data: "cmd:renew" }
+        { text: "一键续期", callback_data: "cmd:renew" },
+        { text: "修改平台", callback_data: "cmd:platform" }
       ]
     ]
   };
@@ -1042,9 +1047,97 @@ function getTelegramCommandFromCallback(data) {
     "cmd:list": "/list",
     "cmd:site": "/site",
     "cmd:help": "/help",
-    "cmd:renew": "/renew"
+    "cmd:renew": "/renew",
+    "cmd:platform": "/platform"
   };
+  if (data && data.startsWith("platform:")) return data;
   return callbackCommands[data] || "";
+}
+
+function splitPlatforms(value) {
+  return String(value || "")
+    .split(/[,，\s]+/)
+    .map(item => item.trim())
+    .filter(Boolean);
+}
+
+function normalizePlatforms(items) {
+  const seen = new Set();
+  const result = [];
+  for (const item of items) {
+    const normalized = item.trim();
+    const key = normalized.toLowerCase();
+    if (!normalized || seen.has(key)) continue;
+    seen.add(key);
+    result.push(normalized);
+  }
+  return result;
+}
+
+function getSimDisplayName(sim, index) {
+  return sim && sim.name ? sim.name : `号码 ${index + 1}`;
+}
+
+function formatPlatformItems(platforms) {
+  if (platforms.length === 0) return "当前还没有填写已注册平台。";
+  return platforms.map((platform, index) => `${index + 1}. ${escapeHtml(platform)}`).join("\n");
+}
+
+function getPlatformListText(esims) {
+  if (esims.length === 0) {
+    return `🌐 <b>已注册平台管理</b>\n\n当前还没有号码记录。\n\n请先点击 [添加号码] 或发送 /add 添加号码。`;
+  }
+  const listText = esims.map((sim, index) => `${index + 1}. ${escapeHtml(getSimDisplayName(sim, index))}\n当前平台：${escapeHtml(sim.platforms || "未填写")}`).join("\n\n");
+  return `🌐 <b>已注册平台管理</b>\n\n请选择要管理已注册平台的号码。\n\n点击下面的号码进入平台管理页。\n\n${listText}`;
+}
+
+function getPlatformListKeyboard(esims) {
+  const rows = esims.map((sim, index) => [
+    { text: `${index + 1}. ${getSimDisplayName(sim, index)}`, callback_data: `platform:view:${index}` }
+  ]);
+  rows.push([{ text: "返回帮助", callback_data: "cmd:help" }]);
+  return { inline_keyboard: rows };
+}
+
+function getPlatformManageText(sim, index, prefix = "") {
+  const platforms = splitPlatforms(sim.platforms);
+  const name = escapeHtml(getSimDisplayName(sim, index));
+  const emptyGuide = platforms.length === 0 ? "\n\n建议填写这个号码绑定过的平台，例如：\nTelegram Google OpenAI\n\n点击 [新增平台] 开始添加。" : "\n\n你可以通过下面按钮新增、删除、重命名或清空平台。";
+  return `${prefix ? `${prefix}\n\n` : ""}📱 <b>${name} 当前已注册平台：</b>\n\n${formatPlatformItems(platforms)}${emptyGuide}`;
+}
+
+function getPlatformManageKeyboard(simIndex, platforms) {
+  const rows = [[{ text: "新增平台", callback_data: `platform:add:${simIndex}` }]];
+  for (let i = 0; i < platforms.length; i += 2) {
+    const row = platforms.slice(i, i + 2).map((platform, offset) => ({
+      text: `删除 ${platform}`,
+      callback_data: `platform:del:${simIndex}:${i + offset}`
+    }));
+    rows.push(row);
+  }
+  if (platforms.length > 0) {
+    rows.push([{ text: "重命名平台", callback_data: `platform:rename:${simIndex}` }]);
+    rows.push([{ text: "清空平台", callback_data: `platform:clear:${simIndex}` }]);
+  }
+  rows.push([{ text: "返回号码列表", callback_data: "cmd:platform" }]);
+  return { inline_keyboard: rows };
+}
+
+function getPlatformRenameKeyboard(simIndex, platforms) {
+  const rows = platforms.map((platform, index) => [
+    { text: platform, callback_data: `platform:rename-target:${simIndex}:${index}` }
+  ]);
+  rows.push([{ text: "返回平台管理", callback_data: `platform:view:${simIndex}` }]);
+  return { inline_keyboard: rows };
+}
+
+function getPlatformClearConfirmKeyboard(simIndex) {
+  return {
+    inline_keyboard: [
+      [{ text: "确认清空", callback_data: `platform:clear-confirm:${simIndex}` }],
+      [{ text: "返回平台管理", callback_data: `platform:view:${simIndex}` }]
+    ]
+  };
 }
 
 function getSiteText() {
@@ -1082,6 +1175,128 @@ function formatSimSummary(data) {
 
 async function saveTelegramSession(env, chatId, session) {
   await env.ESIM_DB.put(getTelegramSessionKey(chatId), JSON.stringify(session), { expirationTtl: TG_SESSION_TTL_SECONDS });
+}
+
+async function sendPlatformList(env, tgToken, chatId) {
+  const esims = await getEsims(env);
+  await sendTelegramMessage(tgToken, chatId, getPlatformListText(esims), getPlatformListKeyboard(esims));
+}
+
+async function sendPlatformManagePage(env, tgToken, chatId, simIndex, prefix = "") {
+  const esims = await getEsims(env);
+  const sim = esims[simIndex];
+  if (!sim) {
+    await sendTelegramMessage(tgToken, chatId, "号码序号不正确，请重新选择。", getPlatformListKeyboard(esims));
+    return;
+  }
+  const platforms = splitPlatforms(sim.platforms);
+  await sendTelegramMessage(tgToken, chatId, getPlatformManageText(sim, simIndex, prefix), getPlatformManageKeyboard(simIndex, platforms));
+}
+
+async function handleTelegramPlatformInput(env, tgToken, chatId, text, session) {
+  const value = text.trim();
+  const esims = await getEsims(env);
+  const sim = esims[session.simIndex];
+  if (!sim) {
+    await env.ESIM_DB.delete(getTelegramSessionKey(chatId));
+    await sendTelegramMessage(tgToken, chatId, "号码不存在，平台管理已取消。", getMainKeyboard());
+    return;
+  }
+
+  if (session.action === "platform_add") {
+    const newPlatforms = normalizePlatforms([...splitPlatforms(sim.platforms), ...splitPlatforms(value)]);
+    sim.platforms = newPlatforms.join(" ");
+    await saveEsims(env, esims);
+    await env.ESIM_DB.delete(getTelegramSessionKey(chatId));
+    await sendPlatformManagePage(env, tgToken, chatId, session.simIndex, `✅ 已更新 ${escapeHtml(getSimDisplayName(sim, session.simIndex))} 的已注册平台：`);
+    return;
+  }
+
+  if (session.action === "platform_rename") {
+    const platforms = splitPlatforms(sim.platforms);
+    const oldName = platforms[session.platformIndex];
+    if (!oldName) {
+      await env.ESIM_DB.delete(getTelegramSessionKey(chatId));
+      await sendPlatformManagePage(env, tgToken, chatId, session.simIndex, "要重命名的平台不存在，已返回平台管理页。");
+      return;
+    }
+    platforms[session.platformIndex] = value;
+    sim.platforms = normalizePlatforms(platforms).join(" ");
+    await saveEsims(env, esims);
+    await env.ESIM_DB.delete(getTelegramSessionKey(chatId));
+    await sendPlatformManagePage(env, tgToken, chatId, session.simIndex, `✅ 已将 ${escapeHtml(oldName)} 修改为 ${escapeHtml(value)}。`);
+  }
+}
+
+async function handleTelegramPlatformCallback(env, tgToken, chatId, text) {
+  const parts = text.split(":");
+  const action = parts[1];
+  const simIndex = Number(parts[2]);
+
+  if (action === "view") {
+    await sendPlatformManagePage(env, tgToken, chatId, simIndex);
+    return;
+  }
+
+  const esims = await getEsims(env);
+  const sim = esims[simIndex];
+  if (!sim) {
+    await sendTelegramMessage(tgToken, chatId, "号码序号不正确，请重新选择。", getPlatformListKeyboard(esims));
+    return;
+  }
+  const platforms = splitPlatforms(sim.platforms);
+
+  if (action === "add") {
+    await saveTelegramSession(env, chatId, { action: "platform_add", simIndex, updatedAt: Date.now() });
+    await sendTelegramMessage(tgToken, chatId, `请输入要新增的平台名称。\n\n可以一次输入一个：\nClaude\n\n也可以一次输入多个：\nClaude GitHub OpenRouter\n\n多个平台请用空格或英文逗号分隔。\n\n如需取消，请发送 /cancel。`, getPlatformManageKeyboard(simIndex, platforms));
+    return;
+  }
+
+  if (action === "del") {
+    const platformIndex = Number(parts[3]);
+    const removed = platforms[platformIndex];
+    if (!removed) {
+      await sendPlatformManagePage(env, tgToken, chatId, simIndex, "要删除的平台不存在，已刷新当前列表。");
+      return;
+    }
+    platforms.splice(platformIndex, 1);
+    sim.platforms = normalizePlatforms(platforms).join(" ");
+    await saveEsims(env, esims);
+    await sendPlatformManagePage(env, tgToken, chatId, simIndex, `✅ 已删除 ${escapeHtml(removed)}。`);
+    return;
+  }
+
+  if (action === "rename") {
+    if (platforms.length === 0) {
+      await sendPlatformManagePage(env, tgToken, chatId, simIndex, "当前没有可重命名的平台，请先新增平台。");
+      return;
+    }
+    await sendTelegramMessage(tgToken, chatId, "请选择要重命名的平台。", getPlatformRenameKeyboard(simIndex, platforms));
+    return;
+  }
+
+  if (action === "rename-target") {
+    const platformIndex = Number(parts[3]);
+    const oldName = platforms[platformIndex];
+    if (!oldName) {
+      await sendPlatformManagePage(env, tgToken, chatId, simIndex, "要重命名的平台不存在，已刷新当前列表。");
+      return;
+    }
+    await saveTelegramSession(env, chatId, { action: "platform_rename", simIndex, platformIndex, updatedAt: Date.now() });
+    await sendTelegramMessage(tgToken, chatId, `请输入新的平台名称。\n\n当前平台：${escapeHtml(oldName)}\n\n例如：\nGoogle Voice\n\n如需取消，请发送 /cancel。`, getPlatformRenameKeyboard(simIndex, platforms));
+    return;
+  }
+
+  if (action === "clear") {
+    await sendTelegramMessage(tgToken, chatId, `确认清空 ${escapeHtml(getSimDisplayName(sim, simIndex))} 的所有已注册平台吗？`, getPlatformClearConfirmKeyboard(simIndex));
+    return;
+  }
+
+  if (action === "clear-confirm") {
+    sim.platforms = "";
+    await saveEsims(env, esims);
+    await sendPlatformManagePage(env, tgToken, chatId, simIndex, `✅ 已清空 ${escapeHtml(getSimDisplayName(sim, simIndex))} 的已注册平台。`);
+  }
 }
 
 async function maybeSendDailyStartKeyboard(env, tgToken, chatId) {
@@ -1242,6 +1457,11 @@ async function handleTelegramWebhook(request, env, tgToken, tgChat, corsHeaders)
     return jsonResponse({ ok: true }, corsHeaders);
   }
 
+  if (text.startsWith("platform:")) {
+    await handleTelegramPlatformCallback(env, tgToken, chatId, text);
+    return jsonResponse({ ok: true }, corsHeaders);
+  }
+
   if (command === "/cancel" || text === "取消") {
     await env.ESIM_DB.delete(sessionKey);
     await sendTelegramMessage(tgToken, chatId, "已取消当前流程。发送 /help 可以查看完整说明。");
@@ -1293,6 +1513,15 @@ async function handleTelegramWebhook(request, env, tgToken, tgChat, corsHeaders)
     return jsonResponse({ ok: true }, corsHeaders);
   }
 
+  if (command === "/platform") {
+    if (text.split(/\s+/).length > 1) {
+      await sendTelegramMessage(tgToken, chatId, "平台管理已改为按钮操作。\n\n请发送 /platform，然后按按钮完成新增、删除、重命名或清空。", getMainKeyboard());
+      return jsonResponse({ ok: true }, corsHeaders);
+    }
+    await sendPlatformList(env, tgToken, chatId);
+    return jsonResponse({ ok: true }, corsHeaders);
+  }
+
   if (command === "/add") {
     if (session && session.action === "add") {
       await sendTelegramMessage(tgToken, chatId, "你已有一个未完成的添加流程。请继续填写，或发送 /cancel 取消后重新开始。", getMainKeyboard());
@@ -1311,6 +1540,11 @@ async function handleTelegramWebhook(request, env, tgToken, tgChat, corsHeaders)
 
   if (session && session.action === "add") {
     await handleTelegramAddStep(env, tgToken, chatId, text, session);
+    return jsonResponse({ ok: true }, corsHeaders);
+  }
+
+  if (session && (session.action === "platform_add" || session.action === "platform_rename")) {
+    await handleTelegramPlatformInput(env, tgToken, chatId, text, session);
     return jsonResponse({ ok: true }, corsHeaders);
   }
 

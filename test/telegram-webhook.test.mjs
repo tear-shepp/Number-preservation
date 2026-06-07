@@ -222,6 +222,7 @@ test("/start 返回欢迎说明和添加流程，/help 只返回可用命令", a
       ],
       [
         { text: "一键续期", callback_data: "cmd:renew" },
+        { text: "修改平台", callback_data: "cmd:platform" },
       ],
     ]);
   } finally {
@@ -265,10 +266,153 @@ test("/help 按钮回调复用现有命令", async () => {
     const keyboardPayloads = capture.payloads.filter(p => p.reply_markup && p.reply_markup.inline_keyboard);
     assert.equal(keyboardPayloads.length, 5, "/list /site /add /help /renew 回调回复都应带导航键盘");
     assert.deepEqual(keyboardPayloads.at(-1).reply_markup.inline_keyboard[1][1], { text: "帮助", callback_data: "cmd:help" });
+    assert.deepEqual(keyboardPayloads.at(-1).reply_markup.inline_keyboard[2][1], { text: "修改平台", callback_data: "cmd:platform" });
 
     const session = JSON.parse(env.ESIM_DB.store.get("tg_session_12345"));
     assert.equal(session.action, "add");
     assert.equal(session.step, "name");
+  } finally {
+    capture.restore();
+  }
+});
+
+test("/platform 显示号码列表和按钮化引导", async () => {
+  const worker = await loadWorker();
+  const env = createEnv({
+    esim_list: JSON.stringify([
+      { id: "1", name: "KnowRoaming", platforms: "Telegram Google" },
+      { id: "2", name: "Firsty", platforms: "" },
+    ]),
+    [startKeyboardKey()]: todayString(),
+  });
+  const capture = captureTelegramMessages();
+
+  try {
+    await worker.fetch(telegramUpdate("/platform"), env, {});
+
+    assert.match(capture.messages.at(-1), /请选择要管理已注册平台的号码/);
+    assert.match(capture.messages.at(-1), /点击下面的号码进入平台管理页/);
+    assert.deepEqual(capture.payloads.at(-1).reply_markup.inline_keyboard, [
+      [{ text: "1. KnowRoaming", callback_data: "platform:view:0" }],
+      [{ text: "2. Firsty", callback_data: "platform:view:1" }],
+      [{ text: "返回帮助", callback_data: "cmd:help" }],
+    ]);
+  } finally {
+    capture.restore();
+  }
+});
+
+test("平台管理页显示新增、删除、重命名、清空和返回按钮", async () => {
+  const worker = await loadWorker();
+  const env = createEnv({
+    esim_list: JSON.stringify([
+      { id: "1", name: "KnowRoaming", platforms: "Telegram Google OpenAI" },
+    ]),
+  });
+  const capture = captureTelegramMessages();
+
+  try {
+    await worker.fetch(telegramCallbackUpdate("platform:view:0"), env, {});
+
+    assert.match(capture.messages.at(-1), /KnowRoaming 当前已注册平台/);
+    assert.match(capture.messages.at(-1), /1\. Telegram/);
+    assert.match(capture.messages.at(-1), /2\. Google/);
+    assert.match(capture.messages.at(-1), /3\. OpenAI/);
+    assert.deepEqual(capture.payloads.at(-1).reply_markup.inline_keyboard, [
+      [{ text: "新增平台", callback_data: "platform:add:0" }],
+      [
+        { text: "删除 Telegram", callback_data: "platform:del:0:0" },
+        { text: "删除 Google", callback_data: "platform:del:0:1" },
+      ],
+      [{ text: "删除 OpenAI", callback_data: "platform:del:0:2" }],
+      [{ text: "重命名平台", callback_data: "platform:rename:0" }],
+      [{ text: "清空平台", callback_data: "platform:clear:0" }],
+      [{ text: "返回号码列表", callback_data: "cmd:platform" }],
+    ]);
+  } finally {
+    capture.restore();
+  }
+});
+
+test("按钮化新增平台后写回 esim_list 并刷新管理页", async () => {
+  const worker = await loadWorker();
+  const env = createEnv({
+    esim_list: JSON.stringify([
+      { id: "1", name: "KnowRoaming", platforms: "Telegram Google" },
+    ]),
+    [startKeyboardKey()]: todayString(),
+  });
+  const capture = captureTelegramMessages();
+
+  try {
+    await worker.fetch(telegramCallbackUpdate("platform:add:0"), env, {});
+    assert.match(capture.messages.at(-1), /请输入要新增的平台名称/);
+
+    await worker.fetch(telegramUpdate("Claude, GitHub"), env, {});
+    const esims = JSON.parse(env.ESIM_DB.store.get("esim_list"));
+    assert.equal(esims[0].platforms, "Telegram Google Claude GitHub");
+    assert.match(capture.messages.at(-1), /已更新 KnowRoaming 的已注册平台/);
+    assert.match(capture.messages.at(-1), /3\. Claude/);
+    assert.match(capture.messages.at(-1), /4\. GitHub/);
+    assert.deepEqual(capture.payloads.at(-1).reply_markup.inline_keyboard[2][0], { text: "删除 Claude", callback_data: "platform:del:0:2" });
+  } finally {
+    capture.restore();
+  }
+});
+
+test("按钮化删除、重命名和清空平台", async () => {
+  const worker = await loadWorker();
+  const env = createEnv({
+    esim_list: JSON.stringify([
+      { id: "1", name: "KnowRoaming", platforms: "Telegram Google OpenAI" },
+    ]),
+    [startKeyboardKey()]: todayString(),
+  });
+  const capture = captureTelegramMessages();
+
+  try {
+    await worker.fetch(telegramCallbackUpdate("platform:del:0:1"), env, {});
+    let esims = JSON.parse(env.ESIM_DB.store.get("esim_list"));
+    assert.equal(esims[0].platforms, "Telegram OpenAI");
+    assert.match(capture.messages.at(-1), /已删除 Google/);
+
+    await worker.fetch(telegramCallbackUpdate("platform:rename:0"), env, {});
+    assert.match(capture.messages.at(-1), /请选择要重命名的平台/);
+    await worker.fetch(telegramCallbackUpdate("platform:rename-target:0:1"), env, {});
+    assert.match(capture.messages.at(-1), /请输入新的平台名称/);
+    await worker.fetch(telegramUpdate("ChatGPT"), env, {});
+    esims = JSON.parse(env.ESIM_DB.store.get("esim_list"));
+    assert.equal(esims[0].platforms, "Telegram ChatGPT");
+    assert.match(capture.messages.at(-1), /已将 OpenAI 修改为 ChatGPT/);
+
+    await worker.fetch(telegramCallbackUpdate("platform:clear:0"), env, {});
+    assert.match(capture.messages.at(-1), /确认清空 KnowRoaming/);
+    await worker.fetch(telegramCallbackUpdate("platform:clear-confirm:0"), env, {});
+    esims = JSON.parse(env.ESIM_DB.store.get("esim_list"));
+    assert.equal(esims[0].platforms, "");
+    assert.match(capture.messages.at(-1), /已清空 KnowRoaming/);
+  } finally {
+    capture.restore();
+  }
+});
+
+test("/platform 备用命令不执行修改，只提示按钮操作", async () => {
+  const worker = await loadWorker();
+  const env = createEnv({
+    esim_list: JSON.stringify([
+      { id: "1", name: "KnowRoaming", platforms: "Telegram" },
+    ]),
+    [startKeyboardKey()]: todayString(),
+  });
+  const capture = captureTelegramMessages();
+
+  try {
+    await worker.fetch(telegramUpdate("/platform 1 add Claude"), env, {});
+
+    const esims = JSON.parse(env.ESIM_DB.store.get("esim_list"));
+    assert.equal(esims[0].platforms, "Telegram");
+    assert.match(capture.messages.at(-1), /平台管理已改为按钮操作/);
+    assert.ok(capture.payloads.at(-1).reply_markup && capture.payloads.at(-1).reply_markup.inline_keyboard);
   } finally {
     capture.restore();
   }
